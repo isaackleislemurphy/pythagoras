@@ -1,4 +1,8 @@
-"""Extract transform and load functions, which pull the game data off my Git, as well as historical PECOTA projections"""
+"""
+Extract transform and load functions, which pull the game data off my Git, as well as historical PECOTA projections
+
+To get the data read in and cleaned for you, call load_model_data() at the bottom of the script!
+"""
 
 import os
 import random

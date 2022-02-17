@@ -55,7 +55,7 @@ def weibull_log_loss(ytrue, net_output):
     return log_lik
 
 
-def make_simple_net(
+def make_forward_block(
     dim_in,
     architecture=(32, 16),
     dropout=(
@@ -65,9 +65,26 @@ def make_simple_net(
     ),
     l2=1e-3,
     eta=1e-3,
+    compile=True,
 ):
     """
-    Makes a very simple feedforward network.
+    Makes (and optionally compiles) a block of linear layers, for use in your model.
+
+    Args:
+        dim_in : int
+            Column dimension of design matrix passed into layers
+        architecture : tuple[int]
+            Each element corresponds to a hidden layer, with the value of the element
+            the number of units in the layer.
+        dropout : tuple[float]
+            Dropout rate to apply to each hidden layer
+        l2 : float
+            L2 regularization applied over all hidden layers.
+            TODO: tie this into final layer as well
+        eta : float
+            Learning rate for ADAM optimizer, if compiled
+        compile : bool
+            Whether or not to compile the model.
     """
     x_in = tfkl.Input(dim_in)
     for i, units in enumerate(architecture):
@@ -78,14 +95,15 @@ def make_simple_net(
             kernel_regularizer=tf.keras.regularizers.L2(l2),
         )(x_in if i == 0 else x)
         x = tfkl.LeakyReLU()(x)
-        # x = tfkl.Dropout(dropout[i], seed=_SEED + 2 * i)(x)
+        x = tfkl.Dropout(dropout[i], seed=_SEED + 2 * i)(x)
     x_out = tfkl.Dense(
         units=2,
         bias_initializer="zeros",
         kernel_initializer=tf.keras.initializers.GlorotUniform(seed=_SEED),
     )(x if len(architecture) > 0 else x_in)
     model = tf.keras.Model(inputs=x_in, outputs=x_out, name="pythag_model")
-    model.compile(loss=weibull_log_loss, optimizer=tfko.Adam(eta))
+    if compile:
+        model.compile(loss=weibull_log_loss, optimizer=tfko.Adam(eta))
     return model
 
 
@@ -101,7 +119,15 @@ class PythagRunModel:
         self.fit_params = {}
 
     def process_data_train(self, train_data_df, features):
-        """"""
+        """
+        Scales and scores training data.
+
+        Args:
+            train_data_df : pd.DataFrame
+                A dataframe containing your data
+            features : list[str]
+                Columns in data that will serve as model features.
+        """
         self.features = features
         self.data["X"] = self.scaler.fit_transform(
             train_data_df[features].values.astype("float32")
@@ -110,7 +136,9 @@ class PythagRunModel:
         self.data["df"] = train_data_df.copy()
 
     def process_data_predict(self, data_df):
-        """"""
+        """
+        Applies scaling to new data for prediction
+        """
         X = self.scaler.transform(data_df[self.features].values)
         if "runs" in data_df.columns:
             Y = data_df.runs.values + 0.5
@@ -119,7 +147,7 @@ class PythagRunModel:
         return X, Y
 
     def configure_data_train(self, train_data_df, features, val_data_df=None):
-        """"""
+        """Configures training data ahead of fit"""
         self.process_data_train(train_data_df, features)
         if val_data_df is not None:
             val_x, val_y = self.process_data_predict(val_data_df)
@@ -128,7 +156,12 @@ class PythagRunModel:
             self.val_data["df"] = val_data_df.copy()
 
     def configure_model(self, **kwargs):
-        self.model = make_simple_net(dim_in=self.data["X"].shape[1], **kwargs)
+        """
+        Sets up and compiles model
+        """
+        self.model = make_forward_block(
+            dim_in=self.data["X"].shape[1], compile=True, **kwargs
+        )
 
     def fit(self, **kwargs):
         """
@@ -185,9 +218,6 @@ def train_test_repeated(
     """
     Trains and validates over a single hyperparameter configuration n_runs times,
     and then scores the average over the validation set.
-
-    Args:
-      train_data :
     """
     train_histories, val_histories = [], []
     for run in trange(n_ensemble):
