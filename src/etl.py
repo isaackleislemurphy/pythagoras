@@ -477,3 +477,7 @@ def load_model_data():
 		suffixes=["_bat", "_pitch"],
 	)
 	return model_data_df
+
+
+if __name__ == '__main__':
+	main()
