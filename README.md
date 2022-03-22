@@ -1,4 +1,5 @@
 # Pythagoras
+Starter code for students in STATS50 (Winter '22)
 
 ### Overview
 - `R` contains files from in-class -- notably, those used to make visuals and pull in game-by-game data from 2016-2021. 
